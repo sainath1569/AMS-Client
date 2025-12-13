@@ -36,7 +36,7 @@ type ScheduleItem = {
     status: boolean;
     subject_code: string;
     subject_mnemonic?: string;
-    otp?: string; // Add OTP field
+    otp?: string;
 };
 
 type ScheduleData = {
@@ -55,7 +55,12 @@ type Subject = {
     subject_type: string;
 };
 
-const API_BASE_URL = 'https://ams-server-4eol.onrender.com';
+interface StudentAttendance {
+    student_number: number; // 1 to 71 (or actual count from backend)
+    status: 'present' | 'absent';
+}
+
+const API_BASE_URL = 'http://10.88.141.102:5000';
 
 const ClassScheduleCard = ({
   item,
@@ -121,7 +126,6 @@ const ClassScheduleCard = ({
 
   const subjectColor = getSubjectColor(item.subject_name);
   
-  // ✅ FIX: Use local date formatting instead of toISOString()
   const formatDateForComparison = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -148,7 +152,6 @@ const ClassScheduleCard = ({
     }
   };
 
-  // Helper function to compare dates (ignoring time)
   const isSameDate = (date1: Date, date2: Date) => {
     return (
       date1.getFullYear() === date2.getFullYear() &&
@@ -157,25 +160,21 @@ const ClassScheduleCard = ({
     );
   };
 
-  // ✅ FIX: Use local date formatting for comparisons
   const isUpcoming = () => {
     const currentDateTime = new Date();
     const scheduleDateStr = formatDateForComparison(scheduleDate);
     const classStartDateTime = parseDateTime(scheduleDateStr, item.start_time);
     
-    // If it's not today, it's always upcoming
     if (!isSameDate(currentDateTime, scheduleDate)) {
       return true;
     }
     
-    // If it's today, check if current time is before class start time
     return currentDateTime < classStartDateTime;
   };
 
   const isOngoing = () => {
     const currentDateTime = new Date();
     
-    // Can only be ongoing if it's today
     if (!isSameDate(currentDateTime, scheduleDate)) {
       return false;
     }
@@ -184,7 +183,7 @@ const ClassScheduleCard = ({
     const classStartDateTime = parseDateTime(scheduleDateStr, item.start_time);
     const classEndDateTime = parseDateTime(scheduleDateStr, item.end_time);
     
-    const bufferMs = 30 * 60 * 1000;
+    const bufferMs = 3000 * 60 * 1000;
     const classEndWithBuffer = new Date(classEndDateTime.getTime() + bufferMs);
     
     return (
@@ -196,16 +195,14 @@ const ClassScheduleCard = ({
   const isExpired = () => {
     const currentDateTime = new Date();
     
-    // If it's a past date, it's expired
     if (scheduleDate < new Date(currentDateTime.getFullYear(), currentDateTime.getMonth(), currentDateTime.getDate())) {
       return true;
     }
     
-    // If it's today, check if class end time has passed (with buffer)
     if (isSameDate(currentDateTime, scheduleDate)) {
       const scheduleDateStr = formatDateForComparison(scheduleDate);
       const classEndDateTime = parseDateTime(scheduleDateStr, item.end_time);
-      const bufferMs = 30 * 60 * 1000;
+      const bufferMs = 3000 * 60 * 1000;
       const classEndWithBuffer = new Date(classEndDateTime.getTime() + bufferMs);
       
       return currentDateTime > classEndWithBuffer;
@@ -224,7 +221,6 @@ const ClassScheduleCard = ({
     const upcoming = isUpcoming();
     const expired = isExpired();
 
-    // PRIORITY 1: Completed classes (highest priority)
     if (completed) {
       return {
         status: 'completed',
@@ -235,7 +231,6 @@ const ClassScheduleCard = ({
       };
     }
 
-    // PRIORITY 2: Class is ongoing (can mark attendance)
     if (ongoing) {
       return {
         status: 'ongoing',
@@ -246,18 +241,16 @@ const ClassScheduleCard = ({
       };
     }
 
-    // PRIORITY 3: Upcoming class
     if (upcoming) {
       return {
         status: 'upcoming',
         badge: { text: 'Upcoming', color: '#15d2f8ff', bgColor: '#e1fffeff' },
         message: 'Class is scheduled - Not started yet',
-        showMarkAttendance: false,
+        showMarkAttendance: true,
         showCancel: true
       };
     }
 
-    // PRIORITY 4: Expired class (missed attendance)
     if (expired) {
       return {
         status: 'expired',
@@ -268,7 +261,6 @@ const ClassScheduleCard = ({
       };
     }
 
-    // Default case
     return {
       status: 'scheduled',
       badge: { text: 'Scheduled', color: '#9E9E9E', bgColor: '#F5F5F5' },
@@ -288,19 +280,15 @@ const ClassScheduleCard = ({
   };
 
   const classStatus = getClassStatus();
-  const upcoming = isUpcoming();
 
-  // Generate subject mnemonic from subject name
   const getSubjectMnemonic = (subjectName: string): string => {
     if (item.subject_mnemonic) return item.subject_mnemonic;
     
-    // Extract first letters of major words
     const words = subjectName.split(' ');
     if (words.length === 1) {
       return subjectName.substring(0, 3).toUpperCase();
     }
     
-    // Take first letter of each word (max 3 letters)
     return words
       .slice(0, 3)
       .map(word => word.charAt(0).toUpperCase())
@@ -311,7 +299,6 @@ const ClassScheduleCard = ({
 
   return (
     <View style={styles.card}>
-      {/* Status badge - top right corner */}
       {classStatus.badge.text ? (
         <View style={[styles.statusBadgeTopRight, { backgroundColor: classStatus.badge.bgColor }]}>
           <Text style={[styles.statusBadgeText, { color: classStatus.badge.color }]}>
@@ -320,7 +307,6 @@ const ClassScheduleCard = ({
         </View>
       ) : null}
       
-      {/* Subject Header with colored badge and Cancel button */}
       <View style={styles.subjectCircle}>
         <View style={[styles.subjectBadge, { backgroundColor: subjectColor.bg }]}>
           <Text style={[styles.subjectInitial, { color: subjectColor.text }]} numberOfLines={1} adjustsFontSizeToFit>
@@ -334,7 +320,6 @@ const ClassScheduleCard = ({
               {item.subject_name}
             </Text>
             
-            {/* Cancel Button - Clean design in header */}
             {classStatus.showCancel && (
               <TouchableOpacity
                 style={styles.cancelButtonHeader}
@@ -347,88 +332,76 @@ const ClassScheduleCard = ({
         </View>
       </View>
 
-      {/* Class Details */}
-      {/* Class Details */}
-<View style={styles.cardDetails}>
-  {/* Timing and Venue */}
-  <View style={{ marginBottom: SPACING.md }}>
-    {/* Time */}
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
-      <Icon name="clock-outline" size={fontSize(20)} color="#1976D2" style={{ marginRight: SPACING.sm }} />
-      <Text 
-        style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600' }]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {formatTime(item.start_time)} - {formatTime(item.end_time)}
-      </Text>
-    </View>
-    
-    {/* Location */}
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
-      <Icon name="map-marker" size={fontSize(20)} color="#E65100" style={{ marginRight: SPACING.sm }} />
-      <Text 
-        style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600', flex: 1 }]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {item.venue || 'Venue not specified'}
-      </Text>
-    </View>
-    
-    {/* Class Info */}
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
-      <Icon name="school" size={fontSize(20)} color="#600202" style={{ marginRight: SPACING.sm }} />
-      <Text 
-        style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600', flex: 1 }]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        E{item.year} {item.department} - {item.section}
-      </Text>
-    </View>
-
-    {/* OTP Display - Show alongside other details */}
-    {item.otp && (
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Icon name="key" size={fontSize(20)} color="#4CAF50" style={{ marginRight: SPACING.sm }} />
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600', color: '#4CAF50' }]}>
-            OTP: {item.otp}
-          </Text>
+      <View style={styles.cardDetails}>
+        <View style={{ marginBottom: SPACING.md }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
+            <Icon name="clock-outline" size={fontSize(20)} color="#1976D2" style={{ marginRight: SPACING.sm }} />
+            <Text 
+              style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600' }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {formatTime(item.start_time)} - {formatTime(item.end_time)}
+            </Text>
+          </View>
           
-        
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
+            <Icon name="map-marker" size={fontSize(20)} color="#E65100" style={{ marginRight: SPACING.sm }} />
+            <Text 
+              style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600', flex: 1 }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {item.venue || 'Venue not specified'}
+            </Text>
+          </View>
+          
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
+            <Icon name="school" size={fontSize(20)} color="#600202" style={{ marginRight: SPACING.sm }} />
+            <Text 
+              style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600', flex: 1 }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              E{item.year} {item.department} - {item.section}
+            </Text>
+          </View>
+
+          {item.otp && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Icon name="key" size={fontSize(20)} color="#4CAF50" style={{ marginRight: SPACING.sm }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.detailText, { fontSize: FONT_SIZES.lg, fontWeight: '600', color: '#4CAF50' }]}>
+                  OTP: {item.otp}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
-      </View>
-    )}
-  </View>
-  
-  {/* Status Messages */}
-  {classStatus.message && (
-    <View style={[
-      styles.infoContainer,
-      { backgroundColor: classStatus.badge.bgColor }
-    ]}>
-      <Icon 
-        name={
-          classStatus.status === 'completed' ? "check-circle" :
-          classStatus.status === 'ongoing' ? "play-circle-outline" :
-          classStatus.status === 'upcoming' ? "calendar-clock" :
-          "close-circle-outline"
-        } 
-        size={fontSize(16)} 
-        color={classStatus.badge.color}
-      />
-      <Text style={[styles.infoText, { color: classStatus.badge.color }]}>
-        {classStatus.message}
-      </Text>
-    </View>
-  )}
+        
+        {classStatus.message && (
+          <View style={[
+            styles.infoContainer,
+            { backgroundColor: classStatus.badge.bgColor }
+          ]}>
+            <Icon 
+              name={
+                classStatus.status === 'completed' ? "check-circle" :
+                classStatus.status === 'ongoing' ? "play-circle-outline" :
+                classStatus.status === 'upcoming' ? "calendar-clock" :
+                "close-circle-outline"
+              } 
+              size={fontSize(16)} 
+              color={classStatus.badge.color}
+            />
+            <Text style={[styles.infoText, { color: classStatus.badge.color }]}>
+              {classStatus.message}
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Action Buttons */}
       <View style={styles.actionButtons}>
-        {/* Mark Attendance Button */}
         {classStatus.showMarkAttendance && (
           <TouchableOpacity
             style={styles.attendanceButton}
@@ -438,12 +411,11 @@ const ClassScheduleCard = ({
             <Text style={[styles.buttonText, { marginLeft: SPACING.sm }]}>Mark Attendance</Text>
           </TouchableOpacity>
         )}
-
-
       </View>
     </View>
   );
 };
+
 const HomeScreen: React.FC<HomeScreenProps> = ({ userEmail, user, setIsLoggedIn, setUser }) => {
     const [actualFacultyId, setActualFacultyId] = useState<string>('');
     const [todaySchedule, setTodaySchedule] = useState<ScheduleItem[]>([]);
@@ -456,13 +428,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ userEmail, user, setIsLoggedIn,
     const [fetchingSlots, setFetchingSlots] = useState<boolean>(false);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [selectedSchedule, setSelectedSchedule] = useState<ScheduleItem | null>(null);
-    const [generatedOTP, setGeneratedOTP] = useState<string>('');
-    const [isGeneratingOTP, setIsGeneratingOTP] = useState<boolean>(false);
     const [attendanceReason, setAttendanceReason] = useState<string>('');
-    
+    const [attendanceData, setAttendanceData] = useState<StudentAttendance[]>([]);
+    const [selectAllState, setSelectAllState] = useState<'allPresent' | 'allAbsent'>('allPresent');
+    const [isSubmittingAttendance, setIsSubmittingAttendance] = useState<boolean>(false);
     const [selectedDate, setSelectedDate] = useState<'today' | 'tomorrow'>('today');
+    const [studentCount, setStudentCount] = useState<number>(71); // Default 71 for testing
+    const [isFetchingStudents, setIsFetchingStudents] = useState<boolean>(false);
 
-    // Filter options
     const yearOptions = ['E1', 'E2', 'E3', 'E4'];
     const departmentOptions = ['CSE', 'ECE', 'EEE', "CHEM",'MECH', 'CIVIL',"MME"];
     const sectionOptions = ['A', 'B', 'C', 'D', 'E'];
@@ -489,96 +462,76 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ userEmail, user, setIsLoggedIn,
         }
     }, [actualFacultyId]);
 
-    // Helper function to get date strings
-    // ✅ FIX: Uses local date methods
-const getDateStrings = () => {
-    const now = new Date();
-    
-    // Get current date in local timezone
-    const today = new Date(now);
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    // Format dates as YYYY-MM-DD (local timezone)
-    const formatDate = (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+    const getDateStrings = () => {
+        const now = new Date();
+        const today = new Date(now);
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const formatDate = (date: Date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        
+        const todayStr = formatDate(today);
+        const tomorrowStr = formatDate(tomorrow);
+        
+        return { todayStr, tomorrowStr };
     };
-    
-    const todayStr = formatDate(today);
-    const tomorrowStr = formatDate(tomorrow);
-    
-    
-    return { todayStr, tomorrowStr };
-};
 
-    // ✅ FIX: Comprehensive logging for debugging
-const fetchSchedules = async () => {
-    if (!actualFacultyId) return;
+    const fetchSchedules = async () => {
+        if (!actualFacultyId) return;
 
-    try {
-        setLoading(true);
-        
-        const { todayStr, tomorrowStr } = getDateStrings();
-        
-
-        
-        const [todayResponse, tomorrowResponse] = await Promise.all([
-            fetch(`${API_BASE_URL}/faculty/${actualFacultyId}/schedule?date=${todayStr}`),
-            fetch(`${API_BASE_URL}/faculty/${actualFacultyId}/schedule?date=${tomorrowStr}`)
-        ]);
-        
-        
-        
-        // Process today's schedule
-        if (todayResponse.ok) {
-            const todayData: ScheduleData = await todayResponse.json();
+        try {
+            setLoading(true);
             
-            setTodaySchedule(todayData.schedules || []);
-        } else {
-            const errorText = await todayResponse.text();
+            const { todayStr, tomorrowStr } = getDateStrings();
+            
+            const [todayResponse, tomorrowResponse] = await Promise.all([
+                fetch(`${API_BASE_URL}/faculty/${actualFacultyId}/schedule?date=${todayStr}`),
+                fetch(`${API_BASE_URL}/faculty/${actualFacultyId}/schedule?date=${tomorrowStr}`)
+            ]);
+            
+            if (todayResponse.ok) {
+                const todayData: ScheduleData = await todayResponse.json();
+                setTodaySchedule(todayData.schedules || []);
+            } else {
+                setTodaySchedule([]);
+            }
+            
+            if (tomorrowResponse.ok) {
+                const tomorrowData: ScheduleData = await tomorrowResponse.json();
+                setTomorrowSchedule(tomorrowData.schedules || []);
+            } else {
+                setTomorrowSchedule([]);
+            }
+            
+        } catch (err) {
+            console.error('❌ Fetch schedules error:', err);
+            Alert.alert('Error', 'Failed to fetch schedules. Please check your connection.');
             setTodaySchedule([]);
-        }
-        
-        // Process tomorrow's schedule
-        if (tomorrowResponse.ok) {
-            const tomorrowData: ScheduleData = await tomorrowResponse.json();
-            
-            setTomorrowSchedule(tomorrowData.schedules || []);
-        } else {
-            const errorText = await tomorrowResponse.text();
             setTomorrowSchedule([]);
+        } finally {
+            setLoading(false);
         }
-        
-    } catch (err) {
-        console.error('❌ Fetch schedules error:', err);
-        Alert.alert('Error', 'Failed to fetch schedules. Please check your connection.');
-        setTodaySchedule([]);
-        setTomorrowSchedule([]);
-    } finally {
-        setLoading(false);
-    }
-};
+    };
 
-    // ✅ FIX: Better error handling
-const onRefresh = async () => {
-    try {
-        setRefreshing(true);
-        await fetchSchedules();
-    } catch (error) {
-        console.error("Error during refresh:", error);
-        Alert.alert('Error', 'Failed to refresh schedules');
-    } finally {
-        setRefreshing(false);
-    }
-};
+    const onRefresh = async () => {
+        try {
+            setRefreshing(true);
+            await fetchSchedules();
+        } catch (error) {
+            console.error("Error during refresh:", error);
+            Alert.alert('Error', 'Failed to refresh schedules');
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
-    // Enhanced sorting function that prioritizes ongoing classes
     const sortSchedule = (schedule: ScheduleItem[], scheduleDate: Date) => {
         return schedule.sort((a, b) => {
-            // Helper function to determine class priority
             const getClassPriority = (item: ScheduleItem) => {
                 const parseDateTime = (timeStr: string) => {
                     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -590,22 +543,18 @@ const onRefresh = async () => {
                 const currentTime = new Date();
                 const startTime = parseDateTime(item.start_time);
                 const endTime = parseDateTime(item.end_time);
-                const bufferMs = 30 * 60 * 1000;
+                const bufferMs = 3000 * 60 * 1000;
                 const endTimeWithBuffer = new Date(endTime.getTime() + bufferMs);
 
-                // Priority 1: Ongoing classes (highest priority)
                 if (currentTime >= startTime && currentTime <= endTimeWithBuffer && !item.status) {
                     return 1;
                 }
-                // Priority 2: Upcoming classes
                 else if (currentTime < startTime && !item.status) {
                     return 2;
                 }
-                // Priority 3: Completed classes
                 else if (item.status) {
                     return 3;
                 }
-                // Priority 4: Expired classes
                 else {
                     return 4;
                 }
@@ -614,38 +563,33 @@ const onRefresh = async () => {
             const priorityA = getClassPriority(a);
             const priorityB = getClassPriority(b);
 
-            // If same priority, sort by start time
             if (priorityA === priorityB) {
                 const [aHours, aMinutes] = a.start_time.split(':').map(Number);
                 const [bHours, bMinutes] = b.start_time.split(':').map(Number);
                 return (aHours * 60 + aMinutes) - (bHours * 60 + bMinutes);
             }
 
-            // Sort by priority (ongoing first, then upcoming, then completed, then expired)
             return priorityA - priorityB;
         });
     };
 
-    // ✅ FIX: Better logging and consistent dates
-const getCurrentSchedule = () => {
-    const schedule = selectedDate === 'today' ? todaySchedule : tomorrowSchedule;
-    const now = new Date();
-    const scheduleDate = selectedDate === 'today' ? now : new Date(now.setDate(now.getDate() + 1));
-    
-    
-    return sortSchedule([...schedule], scheduleDate);
-};
+    const getCurrentSchedule = () => {
+        const schedule = selectedDate === 'today' ? todaySchedule : tomorrowSchedule;
+        const now = new Date();
+        const scheduleDate = selectedDate === 'today' ? now : new Date(now.setDate(now.getDate() + 1));
+        
+        return sortSchedule([...schedule], scheduleDate);
+    };
 
-    // ✅ FIX: Shows actual dates for clarity
-const getScheduleTitle = () => {
-    const now = new Date();
-    const today = now.toLocaleDateString();
-    const tomorrow = new Date(now.setDate(now.getDate() + 1)).toLocaleDateString();
-    
-    return selectedDate === 'today' 
-        ? `Today's Schedule ` 
-        : `Tomorrow's Schedule`;
-};
+    const getScheduleTitle = () => {
+        const now = new Date();
+        const today = now.toLocaleDateString();
+        const tomorrow = new Date(now.setDate(now.getDate() + 1)).toLocaleDateString();
+        
+        return selectedDate === 'today' 
+            ? `Today's Schedule` 
+            : `Tomorrow's Schedule`;
+    };
 
     const handleCancelSchedule = (schedule: ScheduleItem) => {
         Alert.alert(
@@ -681,42 +625,165 @@ const getScheduleTitle = () => {
         }
     };
 
-    const handleMarkAttendance = (schedule: ScheduleItem) => {
+    const handleMarkAttendance = async (schedule: ScheduleItem) => {
         setSelectedSchedule(schedule);
         setShowAttendanceModal(true);
-        setGeneratedOTP('');
         setAttendanceReason('');
+        setAttendanceData([]);
+        setSelectAllState('allPresent');
+        
+        // Check if attendance already exists
+        try {
+            const response = await fetch(
+                `${API_BASE_URL}/attendance/${schedule.id}`
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.attendance && data.attendance.length > 0) {
+                    // Pre-fill the topic if it exists
+                    if (data.topic) {
+                        setAttendanceReason(data.topic);
+                    }
+                    
+                    // Convert backend data to our format (student numbers 1 to 71)
+                    const existingAttendance: StudentAttendance[] = data.attendance.map((att: any, index: number) => ({
+                        student_number: index + 1, // Using index as student number for now
+                        status: att.status === 'present' ? 'present' : 'absent'
+                    }));
+                    
+                    setAttendanceData(existingAttendance);
+                    
+                    // Set selectAllState based on existing attendance
+                    const allPresent = existingAttendance.every(s => s.status === 'present');
+                    const allAbsent = existingAttendance.every(s => s.status === 'absent');
+                    
+                    if (allPresent) {
+                        setSelectAllState('allPresent');
+                    } else if (allAbsent) {
+                        setSelectAllState('allAbsent');
+                    } else {
+                        setSelectAllState('allPresent');
+                    }
+                    
+                    Alert.alert(
+                        'Attendance Exists',
+                        'Attendance has already been marked for this class. You can view or modify it.',
+                        [{ text: 'OK' }]
+                    );
+                    
+                    return;
+                }
+            }
+        } catch (err) {
+            console.error('Check existing attendance error:', err);
+            // Continue normally if check fails
+        }
     };
 
-    const generateOTP = async () => {
-        if (!selectedSchedule) return;
+    const initializeAttendanceData = async () => {
+    if (!selectedSchedule) return;
+
+    try {
+        setIsFetchingStudents(true);
+        
+        // Option 1: Get just count
+        const countResponse = await fetch(
+            `${API_BASE_URL}/class/${selectedSchedule.year}/${selectedSchedule.department}/${selectedSchedule.section}/student-count`
+        );
+        
+        if (countResponse.ok) {
+            const countData = await countResponse.json();
+            const studentCount = countData.count || 71;
+            
+            // Create attendance data with roll numbers 1..studentCount
+            const initialAttendance: StudentAttendance[] = Array.from({ length: studentCount }, (_, i) => ({
+                student_number: i + 1,  // This matches roll_number in DB
+                status: 'present'
+            }));
+            
+            setAttendanceData(initialAttendance);
+            setStudentCount(studentCount);
+        }
+        
+        // Option 2: Get full student list (for better UI)
+        const studentsResponse = await fetch(
+            `${API_BASE_URL}/class/${selectedSchedule.year}/${selectedSchedule.department}/${selectedSchedule.section}/students`
+        );
+        
+        if (studentsResponse.ok) {
+            const studentsData = await studentsResponse.json();
+            const initialAttendance: StudentAttendance[] = studentsData.students.map((student: any) => ({
+                student_number: student.roll_number,  // Use actual roll_number
+                student_id: student.id,
+                student_name: student.name,
+                status: 'present'
+            }));
+            
+            setAttendanceData(initialAttendance);
+            setStudentCount(studentsData.count);
+        }
+        
+        setSelectAllState('allPresent');
+        
+    } catch (err) {
+        console.error('Initialize attendance error:', err);
+        // Fallback
+        const initialAttendance: StudentAttendance[] = Array.from({ length: 71 }, (_, i) => ({
+            student_number: i + 1,
+            status: 'present'
+        }));
+        setAttendanceData(initialAttendance);
+        setStudentCount(71);
+    } finally {
+        setIsFetchingStudents(false);
+    }
+};
+
+    const toggleStudentAttendance = (index: number) => {
+        setAttendanceData(prev => {
+            const newData = [...prev];
+            newData[index].status = newData[index].status === 'present' ? 'absent' : 'present';
+            return newData;
+        });
+        
+        const allPresent = attendanceData.every(s => s.status === 'present');
+        const allAbsent = attendanceData.every(s => s.status === 'absent');
+        
+        if (allPresent) {
+            setSelectAllState('allPresent');
+        } else if (allAbsent) {
+            setSelectAllState('allAbsent');
+        }
+    };
+
+    const toggleAllAttendance = () => {
+        setAttendanceData(prev => {
+            const newStatus = selectAllState === 'allPresent' ? 'absent' : 'present';
+            return prev.map(student => ({
+                ...student,
+                status: newStatus
+            }));
+        });
+        
+        setSelectAllState(prev => prev === 'allPresent' ? 'allAbsent' : 'allPresent');
+    };
+
+    const submitAttendance = async () => {
+        if (!selectedSchedule || attendanceData.length === 0) {
+            Alert.alert('Error', 'No attendance data to submit');
+            return;
+        }
 
         if (!attendanceReason.trim()) {
-            Alert.alert('Error', 'Please enter topic for marking attendance');
+            Alert.alert('Error', 'Please enter topic for the session');
             return;
         }
 
         try {
-            setIsGeneratingOTP(true);
-            
-            // Generate OTP with 2 capital letters, 2 small letters, 2 digits
-            const capitals = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            const smalls = 'abcdefghijklmnopqrstuvwxyz';
-            const digits = '0123456789';
-            
-            const getRandomChar = (str: string) => str[Math.floor(Math.random() * str.length)];
-            
-            const otp = 
-                getRandomChar(capitals) + 
-                getRandomChar(smalls) +
-                getRandomChar(digits) +
-                getRandomChar(capitals) +
-                getRandomChar(digits) + 
-                getRandomChar(smalls);
-            
-            const shuffledOTP = otp.split('').sort(() => 0.5 - Math.random()).join('');
-            
-            const response = await fetch(`${API_BASE_URL}/generate-otp`, {
+            setIsSubmittingAttendance(true);
+
+            const response = await fetch(`${API_BASE_URL}/submit-attendance`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -724,24 +791,38 @@ const getScheduleTitle = () => {
                 body: JSON.stringify({
                     schedule_id: selectedSchedule.id,
                     faculty_id: actualFacultyId,
-                    otp: shuffledOTP,
-                    otp_created_at: new Date().toISOString(),
-                    topic_discussed: attendanceReason.trim()
+                    topic: attendanceReason.trim(),
+                    attendance_date: new Date().toISOString().split('T')[0],
+                    students: attendanceData,
+                    mark_class_completed: true // Tell backend to mark class as completed
                 })
             });
 
             if (!response.ok) {
-                throw new Error('Failed to generate OTP');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to submit attendance');
             }
 
-            setGeneratedOTP(shuffledOTP);
-                    await fetchSchedules();
-
+            const result = await response.json();
+            
+            if (result.success) {
+                Alert.alert('Success', 'Attendance marked successfully!');
+                setShowAttendanceModal(false);
+                setSelectedSchedule(null);
+                setAttendanceReason('');
+                setAttendanceData([]);
+                setSelectAllState('allPresent');
+                
+                // Refresh schedules to show updated status
+                await fetchSchedules();
+            } else {
+                throw new Error(result.error || 'Failed to submit attendance');
+            }
         } catch (err) {
-            console.error('Generate OTP error:', err);
-            Alert.alert('Error', 'Failed to generate OTP');
+            console.error('Submit attendance error:', err);
+            Alert.alert('Error', (err as Error).message);
         } finally {
-            setIsGeneratingOTP(false);
+            setIsSubmittingAttendance(false);
         }
     };
 
@@ -867,35 +948,36 @@ const getScheduleTitle = () => {
     };
 
     const renderFilterButtons = (options: string[], selectedValue: string, setValue: (value: string) => void) => (
-    <View style={styles.filterSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.filterButtonsContainer}>
-                {options.map((option) => (
-                    <TouchableOpacity
-                        key={option}
-                        style={[
-                            styles.filterButton,
-                            selectedValue === option && styles.filterButtonSelected
-                        ]}
-                        onPress={() => {
-                            setValue(option);
-                            if (availableSlots.length > 0) {
-                                setAvailableSlots([]);
-                            }
-                        }}
-                    >
-                        <Text style={[
-                            styles.filterButtonText,
-                            selectedValue === option && styles.filterButtonTextSelected
-                        ]}>
-                            {option}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
-            </View>
-        </ScrollView>
-    </View>
-);
+        <View style={styles.filterSection}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.filterButtonsContainer}>
+                    {options.map((option) => (
+                        <TouchableOpacity
+                            key={option}
+                            style={[
+                                styles.filterButton,
+                                selectedValue === option && styles.filterButtonSelected
+                            ]}
+                            onPress={() => {
+                                setValue(option);
+                                if (availableSlots.length > 0) {
+                                    setAvailableSlots([]);
+                                }
+                            }}
+                        >
+                            <Text style={[
+                                styles.filterButtonText,
+                                selectedValue === option && styles.filterButtonTextSelected
+                            ]}>
+                                {option}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </ScrollView>
+        </View>
+    );
+
     if (!actualFacultyId && user?.email) {
         return (
             <LinearGradient colors={["#900a02", "#600202"]} style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
@@ -969,328 +1051,405 @@ const getScheduleTitle = () => {
                     </TouchableOpacity>
                 </View>
             ) : (
-               // ✅ FIX: Consistent date creation
-<FlatList
-  data={currentSchedule}
-  renderItem={({ item }) => {
-    const now = new Date();
-    const scheduleDate = selectedDate === 'today' 
-      ? now 
-      : new Date(now.setDate(now.getDate() + 1));
-    
-    return (
-      <ClassScheduleCard
-        item={item}
-        scheduleDate={scheduleDate}
-        onCancel={handleCancelSchedule}
-        onMarkAttendance={handleMarkAttendance}
-      />
-    );
-  }}
-
-  keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-  contentContainerStyle={styles.listContainer}
-  refreshControl={
-    <RefreshControl
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      colors={["#600202", "#900a02", "#ff6b6b"]}
-      tintColor="#600202"
-      title="Refreshing..."
-      titleColor="#FFF"
-    />
-  }
-  showsVerticalScrollIndicator={false}
-/>
+                <FlatList
+                    data={currentSchedule}
+                    renderItem={({ item }) => {
+                        const now = new Date();
+                        const scheduleDate = selectedDate === 'today' 
+                            ? now 
+                            : new Date(now.setDate(now.getDate() + 1));
+                        
+                        return (
+                            <ClassScheduleCard
+                                item={item}
+                                scheduleDate={scheduleDate}
+                                onCancel={handleCancelSchedule}
+                                onMarkAttendance={handleMarkAttendance}
+                            />
+                        );
+                    }}
+                    keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+                    contentContainerStyle={styles.listContainer}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={["#600202", "#900a02", "#ff6b6b"]}
+                            tintColor="#600202"
+                            title="Refreshing..."
+                            titleColor="#FFF"
+                        />
+                    }
+                    showsVerticalScrollIndicator={false}
+                />
             )}
 
-           <Modal
-    visible={showCreateModal}
-    animationType="slide"
-    transparent={true}
-    onRequestClose={() => {
-        setShowCreateModal(false);
-        resetNewSchedule();
-    }}
->
-    <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={styles.modalContainer}
-    >
-        <View style={[styles.modalContent, { height: '80%' }]}>
-            <View>
-                <Text style={styles.modalTitle}>Schedule New Class</Text>
-            </View>
-            
-            <ScrollView 
-                style={{ flex: 1 }}
-                contentContainerStyle={{ paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.xl }}
-                showsVerticalScrollIndicator={true}
-                nestedScrollEnabled={true}
+            {/* Create Schedule Modal */}
+            <Modal
+                visible={showCreateModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => {
+                    setShowCreateModal(false);
+                    resetNewSchedule();
+                }}
             >
-                <Text style={styles.label}>Academic Year *</Text>
-                {renderFilterButtons(yearOptions, newSchedule.year, 
-                    (value) => setNewSchedule({...newSchedule, year: value}))}
-                
-                <Text style={styles.label}>Department *</Text>
-                {renderFilterButtons(departmentOptions, newSchedule.department, 
-                    (value) => setNewSchedule({...newSchedule, department: value}))}
-                
-                <Text style={styles.label}>Section *</Text>
-                {renderFilterButtons(sectionOptions, newSchedule.section, 
-                    (value) => setNewSchedule({...newSchedule, section: value}))}
-
-                {/* Rest of your modal content remains the same */}
-                {/* Subject Dropdown */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Subject *</Text>
-                    <ScrollView style={styles.subjectDropdown}>
-                        {subjects.map((subject) => (
-                            <TouchableOpacity
-                                key={subject.subject_code}
-                                style={[
-                                    styles.subjectItem,
-                                    newSchedule.subject_code === subject.subject_code && styles.subjectItemSelected
-                                ]}
-                                onPress={() => setNewSchedule({
-                                    ...newSchedule, 
-                                    subject_code: subject.subject_code
-                                })}
-                            >
-                                <Text style={styles.subjectText}>
-                                    {subject.subject_code} - {subject.subject_name}
-                                </Text>
-                                <Text style={styles.subjectType}>
-                                    ({subject.subject_type})
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
-
-                {/* Fetch Time Slots Button */}
-                {newSchedule.year && newSchedule.department && newSchedule.section && newSchedule.subject_code && (
-                    <TouchableOpacity 
-                        style={[styles.fetchSlotsButton, fetchingSlots && styles.buttonDisabled]}
-                        onPress={fetchAvailableSlots}
-                        disabled={fetchingSlots}
-                    >
-                        {fetchingSlots ? (
-                            <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                            <>
-                                <Text style={styles.fetchSlotsButtonText}>
-                                    Fetch Available Time Slots
-                                </Text>
-                            </>
-                        )}
-                    </TouchableOpacity>
-                )}
-
-                {/* Available Time Slots */}
-                {availableSlots.length > 0 && (
-                    <View style={styles.slotsSection}>
-                        <Text style={styles.slotsTitle}>Available Time Slots</Text>
-                        {availableSlots.map((slot, index) => (
-                            <TouchableOpacity
-                                key={index}
-                                style={[
-                                    styles.slotItem,
-                                    newSchedule.start_time === slot.start_time && styles.slotItemSelected
-                                ]}
-                                onPress={() => setNewSchedule({
-                                    ...newSchedule,
-                                    start_time: slot.start_time,
-                                    end_time: slot.end_time
-                                })}
-                            >
-                                <Text style={styles.slotText}>
-                                    {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                )}
-
-                {/* Venue Input */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Venue (Optional)</Text>
-                    <TextInput
-                        style={styles.textInput}
-                        placeholder="Enter venue"
-                        value={newSchedule.venue}
-                        onChangeText={(text) => setNewSchedule({...newSchedule, venue: text})}
-                        placeholderTextColor="#999"
-                    />
-                </View>
-
-                {/* Selected Time Display */}
-                {newSchedule.start_time && (
-                    <View style={styles.selectedTimeContainer}>
-                        <Text style={styles.selectedTime}>
-                            Selected: {formatTime(newSchedule.start_time)} - {formatTime(newSchedule.end_time)}
-                        </Text>
-                    </View>
-                )}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-                <TouchableOpacity 
-                    style={[styles.modalCancelButton, styles.modalButton]}
-                    onPress={() => {
-                        setShowCreateModal(false);
-                        resetNewSchedule();
-                    }}
+                <KeyboardAvoidingView 
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                    style={styles.modalContainer}
                 >
-                    <Text style={styles.modalCancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                    style={[styles.modalSubmitButton, styles.modalButton, (!newSchedule.start_time) && styles.modalSubmitButtonDisabled]}
-                    onPress={handleCreateSubmit}
-                    disabled={!newSchedule.start_time}
-                >
-                    <Text style={styles.modalSubmitButtonText}>Schedule Class</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    </KeyboardAvoidingView>
-</Modal>
-
-    {/* Mark Attendance Modal */}
-<Modal
-    visible={showAttendanceModal}
-    animationType="slide"
-    transparent={true}
-    onRequestClose={() => {
-        setShowAttendanceModal(false);
-        setSelectedSchedule(null);
-        setGeneratedOTP('');
-        setAttendanceReason('');
-    }}
->
-    <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={styles.modalContainer}
-    >
-        <View style={[styles.modalContent, { height: '80%' }]}>
-            {/* Updated Header - Same as Schedule New Class */}
-            <View>
-                <Text style={styles.modalTitle}>Mark Attendance</Text>
-            </View>
-            
-            <ScrollView 
-                style={{ flex: 1 }}
-                contentContainerStyle={{ paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.xl }}
-                showsVerticalScrollIndicator={true}
-                nestedScrollEnabled={true}
-            >
-                {selectedSchedule && (
-                    <View style={styles.classInfoContainer}>
-                        <Text style={styles.classInfoTitle}>Class Details</Text>
-                        <View style={styles.classDetailRow}>
-                            <Text style={styles.classDetailLabel}>Subject:</Text>
-                            <Text style={styles.classDetailValue}>{selectedSchedule.subject_name}</Text>
+                    <View style={[styles.modalContent, { height: '80%' }]}>
+                        <View>
+                            <Text style={styles.modalTitle}>Schedule New Class</Text>
                         </View>
-                        <View style={styles.classDetailRow}>
-                            <Text style={styles.classDetailLabel}>Class:</Text>
-                            <Text style={styles.classDetailValue}>
-                                E-{selectedSchedule.year} {selectedSchedule.department} - {selectedSchedule.section}
-                            </Text>
-                        </View>
-                        <View style={styles.classDetailRow}>
-                            <Text style={styles.classDetailLabel}>Time:</Text>
-                            <Text style={styles.classDetailValue}>
-                                {formatTime(selectedSchedule.start_time)} - {formatTime(selectedSchedule.end_time)}
-                            </Text>
-                        </View>
-                        <View style={styles.classDetailRow}>
-                            <Text style={styles.classDetailLabel}>Venue:</Text>
-                            <Text style={styles.classDetailValue}>
-                                {selectedSchedule.venue || 'Not specified'}
-                            </Text>
-                        </View>
-                    </View>
-                )}
-
-                {/* Attendance Reason Input */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Topic Discussed *</Text>
-                    <TextInput
-                        style={styles.textArea}
-                        placeholder="Enter the topics you have discussed today..."
-                        value={attendanceReason}
-                        onChangeText={setAttendanceReason}
-                        placeholderTextColor="#999"
-                        multiline={true}
-                        numberOfLines={4}
-                        textAlignVertical="top"
-                    />
-                </View>
-
-                {/* OTP Display Section */}
-                <View style={styles.otpSection}>
-                    <Text style={styles.otpTitle}>Attendance OTP</Text>
-                    
-                    {/* Show existing OTP if available */}
-                    {selectedSchedule?.otp && (
-                        <View style={styles.existingOtpContainer}>
-                            <Text style={styles.existingOtpLabel}>Current OTP:</Text>
-                            <Text style={styles.existingOtpValue}>{selectedSchedule.otp}</Text>
+                        
+                        <ScrollView 
+                            style={{ flex: 1 }}
+                            contentContainerStyle={{ paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.xl }}
+                            showsVerticalScrollIndicator={true}
+                            nestedScrollEnabled={true}
+                        >
+                            <Text style={styles.label}>Academic Year *</Text>
+                            {renderFilterButtons(yearOptions, newSchedule.year, 
+                                (value) => setNewSchedule({...newSchedule, year: value}))}
                             
-                            <Text style={styles.otpInstruction}>
-                                Share this OTP with your students. They need to enter this in their app to mark attendance.
-                            </Text>
-                        </View>
-                    )}
+                            <Text style={styles.label}>Department *</Text>
+                            {renderFilterButtons(departmentOptions, newSchedule.department, 
+                                (value) => setNewSchedule({...newSchedule, department: value}))}
+                            
+                            <Text style={styles.label}>Section *</Text>
+                            {renderFilterButtons(sectionOptions, newSchedule.section, 
+                                (value) => setNewSchedule({...newSchedule, section: value}))}
 
-                    {/* Show newly generated OTP */}
-                    {generatedOTP && (
-                        <View style={styles.generatedOtpContainer}>
-                            <Text style={styles.generatedOtpLabel}>New OTP Generated:</Text>
-                            <Text style={styles.generatedOtpValue}>{generatedOTP}</Text>
-                            <Text style={styles.otpInstruction}>
-                                Share this OTP with your students. They need to enter this in their app to mark attendance.
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            </ScrollView>
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Subject *</Text>
+                                <ScrollView style={styles.subjectDropdown}>
+                                    {subjects.map((subject) => (
+                                        <TouchableOpacity
+                                            key={subject.subject_code}
+                                            style={[
+                                                styles.subjectItem,
+                                                newSchedule.subject_code === subject.subject_code && styles.subjectItemSelected
+                                            ]}
+                                            onPress={() => setNewSchedule({
+                                                ...newSchedule, 
+                                                subject_code: subject.subject_code
+                                            })}
+                                        >
+                                            <Text style={styles.subjectText}>
+                                                {subject.subject_code} - {subject.subject_name}
+                                            </Text>
+                                            <Text style={styles.subjectType}>
+                                                ({subject.subject_type})
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
 
-            {/* Footer with Action Buttons */}
-            <View style={styles.modalFooter}>
-                <TouchableOpacity 
-                    style={[styles.modalCancelButton, styles.modalButton]}
-                    onPress={() => {
-                        setShowAttendanceModal(false);
-                        setSelectedSchedule(null);
-                        setGeneratedOTP('');
-                        setAttendanceReason('');
-                    }}
+                            {newSchedule.year && newSchedule.department && newSchedule.section && newSchedule.subject_code && (
+                                <TouchableOpacity 
+                                    style={[styles.fetchSlotsButton, fetchingSlots && styles.buttonDisabled]}
+                                    onPress={fetchAvailableSlots}
+                                    disabled={fetchingSlots}
+                                >
+                                    {fetchingSlots ? (
+                                        <ActivityIndicator size="small" color="#FFF" />
+                                    ) : (
+                                        <>
+                                            <Text style={styles.fetchSlotsButtonText}>
+                                                Fetch Available Time Slots
+                                            </Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            )}
+
+                            {availableSlots.length > 0 && (
+                                <View style={styles.slotsSection}>
+                                    <Text style={styles.slotsTitle}>Available Time Slots</Text>
+                                    {availableSlots.map((slot, index) => (
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.slotItem,
+                                                newSchedule.start_time === slot.start_time && styles.slotItemSelected
+                                            ]}
+                                            onPress={() => setNewSchedule({
+                                                ...newSchedule,
+                                                start_time: slot.start_time,
+                                                end_time: slot.end_time
+                                            })}
+                                        >
+                                            <Text style={styles.slotText}>
+                                                {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
+
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Venue (Optional)</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    placeholder="Enter venue"
+                                    value={newSchedule.venue}
+                                    onChangeText={(text) => setNewSchedule({...newSchedule, venue: text})}
+                                    placeholderTextColor="#999"
+                                />
+                            </View>
+
+                            {newSchedule.start_time && (
+                                <View style={styles.selectedTimeContainer}>
+                                    <Text style={styles.selectedTime}>
+                                        Selected: {formatTime(newSchedule.start_time)} - {formatTime(newSchedule.end_time)}
+                                    </Text>
+                                </View>
+                            )}
+                        </ScrollView>
+
+                        <View style={styles.modalFooter}>
+                            <TouchableOpacity 
+                                style={[styles.modalCancelButton, styles.modalButton]}
+                                onPress={() => {
+                                    setShowCreateModal(false);
+                                    resetNewSchedule();
+                                }}
+                            >
+                                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.modalSubmitButton, styles.modalButton, (!newSchedule.start_time) && styles.modalSubmitButtonDisabled]}
+                                onPress={handleCreateSubmit}
+                                disabled={!newSchedule.start_time}
+                            >
+                                <Text style={styles.modalSubmitButtonText}>Schedule Class</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
+            {/* Mark Attendance Modal */}
+            <Modal
+                visible={showAttendanceModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => {
+                    setShowAttendanceModal(false);
+                    setSelectedSchedule(null);
+                    setAttendanceReason('');
+                    setAttendanceData([]);
+                    setSelectAllState('allPresent');
+                }}
+            >
+                <KeyboardAvoidingView 
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                    style={styles.modalContainer}
                 >
-                    <Text style={styles.modalCancelButtonText}>Close</Text>
-                </TouchableOpacity>
-                {!selectedSchedule?.otp && !generatedOTP && (
-                    <TouchableOpacity 
-                        style={[styles.modalSubmitButton, styles.modalButton, (!attendanceReason.trim()) && styles.modalSubmitButtonDisabled]}
-                        onPress={generateOTP}
-                        disabled={!attendanceReason.trim() || isGeneratingOTP}
-                    >
-                        {isGeneratingOTP ? (
-                            <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                            <Text style={styles.modalSubmitButtonText}>Generate OTP</Text>
-                        )}
-                    </TouchableOpacity>
-                )}
-            </View>
-        </View>
-    </KeyboardAvoidingView>
-</Modal>
+                    <View style={[styles.modalContent, { height: '90%' }]}>
+                        <View>
+                            <Text style={styles.modalTitle}>
+                                {attendanceData.length > 0 
+                                    ? selectedSchedule?.status 
+                                        ? 'View Attendance' 
+                                        : 'Mark Attendance'
+                                    : 'Enter Topic for Session'
+                                }
+                            </Text>
+                        </View>
+                        
+                        <ScrollView 
+                            style={{ flex: 1 }}
+                            contentContainerStyle={{ paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.xl }}
+                            showsVerticalScrollIndicator={true}
+                            nestedScrollEnabled={true}
+                        >
+                            {selectedSchedule && (
+                                <View style={styles.classInfoContainer}>
+                                    <Text style={styles.classInfoTitle}>Class Details</Text>
+                                    <View style={styles.classDetailRow}>
+                                        <Text style={styles.classDetailLabel}>Subject:</Text>
+                                        <Text style={styles.classDetailValue}>{selectedSchedule.subject_name}</Text>
+                                    </View>
+                                    <View style={styles.classDetailRow}>
+                                        <Text style={styles.classDetailLabel}>Class:</Text>
+                                        <Text style={styles.classDetailValue}>
+                                            E-{selectedSchedule.year} {selectedSchedule.department} - {selectedSchedule.section}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.classDetailRow}>
+                                        <Text style={styles.classDetailLabel}>Time:</Text>
+                                        <Text style={styles.classDetailValue}>
+                                            {formatTime(selectedSchedule.start_time)} - {formatTime(selectedSchedule.end_time)}
+                                        </Text>
+                                    </View>
+                                    
+                                    {attendanceData.length > 0 && (
+                                        <View style={[styles.classDetailRow, { marginTop: spacing(8) }]}>
+                                            <Text style={[styles.classDetailLabel, { color: '#4CAF50' }]}>Status:</Text>
+                                            <Text style={[styles.classDetailValue, { color: '#4CAF50', fontWeight: 'bold' }]}>
+                                                {attendanceData.filter(s => s.status === 'present').length}/{attendanceData.length} Present
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+
+                            {/* Topic Input */}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.label}>Topic Discussed Today *</Text>
+                                <TextInput
+                                    style={styles.textArea}
+                                    placeholder="Enter the topics you have discussed today..."
+                                    value={attendanceReason}
+                                    onChangeText={setAttendanceReason}
+                                    placeholderTextColor="#999"
+                                    multiline={true}
+                                    numberOfLines={3}
+                                    textAlignVertical="top"
+                                    editable={!selectedSchedule?.status} // Disable if class completed
+                                />
+                            </View>
+
+                            {/* Enter Attendance Button - Only show if no attendance data loaded */}
+                            
+
+                            {/* Attendance Grid Section */}
+                            {attendanceData.length > 0 && (
+                                <View style={styles.attendanceGridSection}>
+                                    <View style={styles.attendanceHeader}>
+                                        <Text style={styles.attendanceTitle}>
+                                            Attendance ({attendanceData.filter(s => s.status === 'present').length}/{attendanceData.length})
+                                        </Text>
+                                        
+                                        {/* Show invert button only if class is not completed */}
+                                        {!selectedSchedule?.status && (
+                                            <TouchableOpacity 
+                                                style={styles.invertButton}
+                                                onPress={toggleAllAttendance}
+                                            >
+                                                <Icon 
+                                                    name={selectAllState === 'allPresent' ? "checkbox-multiple-marked-outline" : "checkbox-multiple-blank-outline"} 
+                                                    size={fontSize(18)} 
+                                                    color="#FFF" 
+                                                />
+                                                <Text style={styles.invertButtonText}>
+                                                    {selectAllState === 'allPresent' ? 'Mark All Absent' : 'Mark All Present'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+
+                                    {/* Show message if attendance is already marked as completed */}
+                                    {selectedSchedule?.status && (
+                                        <View style={[styles.infoContainer, { backgroundColor: '#E8F5E9', marginBottom: SPACING.lg }]}>
+                                            <Icon name="check-circle" size={fontSize(16)} color="#4CAF50" />
+                                            <Text style={[styles.infoText, { color: '#2E7D32' }]}>
+                                                Attendance already marked as completed. View only mode.
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {/* Attendance Grid */}
+                                    <View style={styles.gridContainer}>
+                                        {attendanceData.map((student, index) => (
+                                            <TouchableOpacity
+                                                key={student.student_number}
+                                                style={[
+                                                    styles.gridItem,
+                                                    student.status === 'present' ? styles.gridItemPresent : styles.gridItemAbsent,
+                                                    selectedSchedule?.status && styles.gridItemDisabled
+                                                ]}
+                                                onPress={() => !selectedSchedule?.status && toggleStudentAttendance(index)}
+                                                disabled={selectedSchedule?.status}
+                                            >
+                                                <Text style={styles.gridItemNumber}>
+                                                    {student.student_number}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+
+                                    {/* Attendance Summary */}
+                                    <View style={styles.attendanceSummary}>
+                                        <View style={styles.summaryItem}>
+                                            <View style={[styles.summaryDot, { backgroundColor: '#4CAF50' }]} />
+                                            <Text style={styles.summaryText}>
+                                                Present: {attendanceData.filter(s => s.status === 'present').length}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.summaryItem}>
+                                            <View style={[styles.summaryDot, { backgroundColor: '#F44336' }]} />
+                                            <Text style={styles.summaryText}>
+                                                Absent: {attendanceData.filter(s => s.status === 'absent').length}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            )}
+                        </ScrollView>
+
+                        {/* Footer with Action Buttons */}
+                        <View style={styles.modalFooter}>
+                            <TouchableOpacity 
+                                style={[styles.modalCancelButton, styles.modalButton]}
+                                onPress={() => {
+                                    setShowAttendanceModal(false);
+                                    setSelectedSchedule(null);
+                                    setAttendanceReason('');
+                                    setAttendanceData([]);
+                                    setSelectAllState('allPresent');
+                                }}
+                            >
+                                <Text style={styles.modalCancelButtonText}>
+                                    {attendanceData.length > 0 ? 'Close' : 'Cancel'}
+                                </Text>
+                            </TouchableOpacity>
+                            
+                            {/* Show "Enter Attendance" button on right side when only topic is entered */}
+                            {attendanceData.length === 0 && attendanceReason.trim() && !selectedSchedule?.status && (
+                                <TouchableOpacity 
+                                    style={[styles.modalSubmitButton, styles.modalButton]}
+                                    onPress={initializeAttendanceData}
+                                    disabled={isFetchingStudents}
+                                >
+                                    {isFetchingStudents ? (
+                                        <ActivityIndicator size="small" color="#FFF" />
+                                    ) : (
+                                        <Text style={styles.modalSubmitButtonText}>
+                                        <Icon name ="account-check-outline" size={fontSize(18)} color="#FFF" />
+                                            Enter
+                                        </Text>
+                                    )}  
+                                </TouchableOpacity>
+                            )}
+                            
+                            {/* Show submit button only if class is not completed and we have attendance data */}
+                            {attendanceData.length > 0 && !selectedSchedule?.status && (
+                                <TouchableOpacity 
+                                    style={[styles.modalSubmitButton, styles.modalButton]}
+                                    onPress={submitAttendance}
+                                    disabled={isSubmittingAttendance || !attendanceReason.trim()}
+                                >
+                                    {isSubmittingAttendance ? (
+                                        <ActivityIndicator size="small" color="#FFF" />
+                                    ) : (
+                                        <Text style={styles.modalSubmitButtonText}>
+                                            Submit 
+                                        </Text>
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </View>
     );
 };
 
-// Helper function for formatting time
 const formatTime = (timeStr: string): string => {
     if (!timeStr) return '';
     const [hours, minutes] = timeStr.split(':');
@@ -1300,7 +1459,6 @@ const formatTime = (timeStr: string): string => {
     return `${formattedHour}:${minutes} ${ampm}`;
 };
 
-// Use the exact same styles from the student app
 const styles = StyleSheet.create({
     container: { 
         flex: 1, 
@@ -1347,60 +1505,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 4,
     },
-    // Add to your styles object
-noOtpContainer: {
-  backgroundColor: '#F5F5F5',
-  padding: spacing(20),
-  borderRadius: 8,
-  alignItems: 'center',
-  marginBottom: spacing(10),
-  borderWidth: 1,
-  borderColor: '#E0E0E0',
-},
-noOtpText: {
-  fontSize: FONT_SIZES.lg,
-  color: '#757575',
-  fontWeight: '600',
-  marginTop: spacing(10),
-  textAlign: 'center',
-},
-noOtpSubtext: {
-  fontSize: FONT_SIZES.sm,
-  color: '#9E9E9E',
-  textAlign: 'center',
-  marginTop: spacing(5),
-  fontStyle: 'italic',
-},
-// Add these missing styles to your styles object
-existingOtpContainer: {
-    backgroundColor: '#FFF3CD',
-    padding: spacing(15),
-    borderRadius: 8,
-    marginBottom: spacing(10),
-    borderWidth: 1,
-    borderColor: '#FFC107',
-},
-existingOtpLabel: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
-    color: '#856404',
-    marginBottom: spacing(5),
-},
-existingOtpValue: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: 'bold',
-    color: '#600202',
-    textAlign: 'center',
-    marginVertical: spacing(5),
-    letterSpacing: 2,
-},
-otpTime: {
-    fontSize: FONT_SIZES.sm,
-    color: '#856404',
-    textAlign: 'center',
-    marginBottom: spacing(5),
-    fontStyle: 'italic',
-},
     dateButtonText: {
         color: 'rgba(255, 255, 255, 0.9)',
         fontSize: fontSize(15),
@@ -1411,7 +1515,6 @@ otpTime: {
         color: '#900a02',
         fontWeight: '700',
     },
-
     scheduleTitle: { 
         color: "#FFF", 
         fontSize: FONT_SIZES.xl, 
@@ -1545,21 +1648,10 @@ otpTime: {
         height: 40,
         elevation: 2,
     },
-    upcomingPlaceholder: {
-        backgroundColor: '#F5F5F5',
-        paddingVertical: spacing(10),
-        paddingHorizontal: SPACING.xl,
-        borderRadius: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        justifyContent: 'center',
-    },
-    upcomingPlaceholderText: {
-        color: '#9E9E9E',
-        fontSize: fontSize(13),
-        fontWeight: '500',
-        marginLeft: SPACING.sm,
+    cancelButtonHeader: { 
+        position: 'absolute',
+        top: spacing(10), 
+        right: spacing(13),
     },
     emptyContainer: { 
         flex: 1, 
@@ -1621,26 +1713,8 @@ otpTime: {
         backgroundColor: '#600202',
         color: '#FFF',
     },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: SPACING.xl,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e9ecef',
-    },
-    formContainer: {
-        padding: SPACING.xl,
-    },
-    // Filter Styles
     filterSection: {
         marginBottom: spacing(25),
-    },
-    filterLabel: {
-        color: '#600202',
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '600',
-        marginBottom: SPACING.md,
     },
     filterButtonsContainer: {
         flexDirection: 'row',
@@ -1669,7 +1743,6 @@ otpTime: {
         color: '#FFF',
         fontWeight: '600',
     },
-    // Input Groups
     inputGroup: {
         marginBottom: SPACING.xl,
     },
@@ -1696,7 +1769,6 @@ otpTime: {
         borderLeftWidth: 4,
         borderLeftColor: '#28A745',
     },
-    
     subjectType: {
         fontSize: FONT_SIZES.sm,
         color: '#6C757D',
@@ -1782,31 +1854,34 @@ otpTime: {
     },
     modalFooter: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
+        justifyContent: 'space-between',
         alignItems: 'center',
         paddingVertical: SPACING.lg,
         paddingHorizontal: SPACING.xl,
         borderTopWidth: 1,
         borderTopColor: '#E0E0E0',
         backgroundColor: '#FFF',
+        gap: 10,
     },
     modalButton: {
-        backgroundColor: "#600202",
         paddingVertical: spacing(14),
-        paddingHorizontal: SPACING.xxxl,
+        paddingHorizontal: SPACING.xl,
         borderRadius: 10,
         minWidth: 120,
         alignItems: 'center',
         elevation: 2,
+        flex: 1,
     },
     modalCancelButton: {
         backgroundColor: '#757575',
     },
     modalSubmitButton: {
         backgroundColor: '#28a745',
+        height: '100%',
     },
     modalSubmitButtonDisabled: {
         backgroundColor: '#6c757d',
+        opacity: 0.6,
     },
     buttonDisabled: {
         opacity: 0.6,
@@ -1850,68 +1925,121 @@ otpTime: {
         color: '#495057',
         fontWeight: '500',
     },
-    otpSection: {
-        backgroundColor: '#E8F5E8',
-        padding: spacing(15),
-        borderRadius: 12,
-        borderLeftWidth: 4,
-        borderLeftColor: '#28A745',
-        marginBottom: spacing(30),
-    },
-    otpTitle: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: 'bold',
-        color: '#28A745',
-        marginBottom: spacing(5),
-    },
-    generateOtpButton: {
+    enterAttendanceButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#28A745',
-        paddingVertical: SPACING.md,
-        paddingHorizontal: SPACING.lg,
-        borderRadius: 8,
+        backgroundColor: '#600202',
+        paddingVertical: SPACING.lg,
+        paddingHorizontal: SPACING.xxl,
+        borderRadius: 10,
         justifyContent: 'center',
-        gap: 8,
-        marginBottom: spacing(10),
+        gap: 10,
+        marginVertical: SPACING.xl,
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
     },
-    generateOtpButtonText: {
+    enterAttendanceButtonText: {
         color: '#FFF',
         fontSize: FONT_SIZES.lg,
-        fontWeight: '600',
+        fontWeight: 'bold',
     },
-    generatedOtpContainer: {
-        backgroundColor: '#FFF',
+    attendanceGridSection: {
+        marginTop: SPACING.lg,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 12,
         padding: spacing(15),
-        borderRadius: 8,
         borderWidth: 1,
-        borderColor: '#28A745',
+        borderColor: '#E0E0E0',
     },
-    generatedOtpLabel: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
-        color: '#28A745',
-        marginBottom: spacing(5),
+    attendanceHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: SPACING.lg,
+        paddingBottom: SPACING.md,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E0E0',
     },
-    generatedOtpValue: {
-        fontSize: FONT_SIZES.xxxl,
+    attendanceTitle: {
+        fontSize: FONT_SIZES.lg,
         fontWeight: 'bold',
         color: '#600202',
-        textAlign: 'center',
-        marginVertical: spacing(10),
-        letterSpacing: 3,
     },
-    otpInstruction: {
+    invertButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FF6B35',
+        paddingVertical: spacing(8),
+        paddingHorizontal: spacing(12),
+        borderRadius: 8,
+        gap: 6,
+    },
+    invertButtonText: {
+        color: '#FFF',
         fontSize: FONT_SIZES.sm,
-        color: '#6C757D',
-        fontStyle: 'italic',
-        textAlign: 'center',
+        fontWeight: '600',
     },
-    cancelButtonHeader: { 
-        position: 'absolute',
-        top: spacing(10), 
-        right: spacing(13),
-       
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'flex-start',
+        gap: 8,
+        marginBottom: SPACING.lg,
+    },
+    gridItem: {
+        width: '11%', // Adjust based on screen size for 71 items
+        aspectRatio: 1,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 4,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 1,
+    },
+    gridItemPresent: {
+        backgroundColor: '#4CAF50',
+    },
+    gridItemAbsent: {
+        backgroundColor: '#F44336',
+    },
+    gridItemDisabled: {
+        opacity: 0.7,
+    },
+    gridItemNumber: {
+        color: '#FFF',
+        fontSize: FONT_SIZES.md,
+        fontWeight: 'bold',
+    },
+    attendanceSummary: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        backgroundColor: '#FFF',
+        padding: spacing(12),
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    summaryItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    summaryDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+    },
+    summaryText: {
+        fontSize: FONT_SIZES.md,
+        color: '#424242',
+        fontWeight: '600',
     },
 });
 
