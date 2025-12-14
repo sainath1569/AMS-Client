@@ -60,7 +60,7 @@ interface StudentAttendance {
     status: 'present' | 'absent';
 }
 
-const API_BASE_URL = 'http://10.88.141.102:5000';
+const API_BASE_URL = 'https://ams-server-4eol.onrender.com';
 
 const ClassScheduleCard = ({
   item,
@@ -183,7 +183,7 @@ const ClassScheduleCard = ({
     const classStartDateTime = parseDateTime(scheduleDateStr, item.start_time);
     const classEndDateTime = parseDateTime(scheduleDateStr, item.end_time);
     
-    const bufferMs = 3000 * 60 * 1000;
+    const bufferMs = 30 * 60 * 1000;
     const classEndWithBuffer = new Date(classEndDateTime.getTime() + bufferMs);
     
     return (
@@ -202,7 +202,7 @@ const ClassScheduleCard = ({
     if (isSameDate(currentDateTime, scheduleDate)) {
       const scheduleDateStr = formatDateForComparison(scheduleDate);
       const classEndDateTime = parseDateTime(scheduleDateStr, item.end_time);
-      const bufferMs = 3000 * 60 * 1000;
+      const bufferMs = 30 * 60 * 1000;
       const classEndWithBuffer = new Date(classEndDateTime.getTime() + bufferMs);
       
       return currentDateTime > classEndWithBuffer;
@@ -246,7 +246,7 @@ const ClassScheduleCard = ({
         status: 'upcoming',
         badge: { text: 'Upcoming', color: '#15d2f8ff', bgColor: '#e1fffeff' },
         message: 'Class is scheduled - Not started yet',
-        showMarkAttendance: true,
+        showMarkAttendance: false,
         showCancel: true
       };
     }
@@ -451,9 +451,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ userEmail, user, setIsLoggedIn,
     });
 
     useEffect(() => {
-        if (user?.email) {
-            setActualFacultyId("F001");
-        }
+        const fetchFacultyId = async () => {
+            if (user?.email) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/faculty/by-email?email=${encodeURIComponent(user.email)}`);
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch faculty data');
+                    }
+                    const data = await response.json();
+                    console.log('Fetched faculty data id:', data.id);
+                    setActualFacultyId(data.faculty_id || data.id);
+                } catch (error) {
+                    console.error('Error fetching faculty ID:', error);
+                    // Fallback to email-based ID if backend fails
+                    const mailId = user.email.split('@')[0];
+                    setActualFacultyId(mailId);
+                }
+            }
+        };
+        fetchFacultyId();
     }, [user]);
 
     useEffect(() => {
@@ -543,7 +559,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ userEmail, user, setIsLoggedIn,
                 const currentTime = new Date();
                 const startTime = parseDateTime(item.start_time);
                 const endTime = parseDateTime(item.end_time);
-                const bufferMs = 3000 * 60 * 1000;
+                const bufferMs = 30 * 60 * 1000;
                 const endTimeWithBuffer = new Date(endTime.getTime() + bufferMs);
 
                 if (currentTime >= startTime && currentTime <= endTimeWithBuffer && !item.status) {
@@ -666,12 +682,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ userEmail, user, setIsLoggedIn,
                         setSelectAllState('allPresent');
                     }
                     
-                    Alert.alert(
-                        'Attendance Exists',
-                        'Attendance has already been marked for this class. You can view or modify it.',
-                        [{ text: 'OK' }]
-                    );
-                    
                     return;
                 }
             }
@@ -704,25 +714,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ userEmail, user, setIsLoggedIn,
             
             setAttendanceData(initialAttendance);
             setStudentCount(studentCount);
-        }
-        
-        // Option 2: Get full student list (for better UI)
-        const studentsResponse = await fetch(
-            `${API_BASE_URL}/class/${selectedSchedule.year}/${selectedSchedule.department}/${selectedSchedule.section}/students`
-        );
-        
-        if (studentsResponse.ok) {
-            const studentsData = await studentsResponse.json();
-            const initialAttendance: StudentAttendance[] = studentsData.students.map((student: any) => ({
-                student_number: student.roll_number,  // Use actual roll_number
-                student_id: student.id,
-                student_name: student.name,
-                status: 'present'
-            }));
-            
-            setAttendanceData(initialAttendance);
-            setStudentCount(studentsData.count);
-        }
+        }     
         
         setSelectAllState('allPresent');
         

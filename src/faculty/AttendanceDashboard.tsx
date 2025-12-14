@@ -44,18 +44,42 @@ const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
 })  => {
   const navigation = useNavigation<NavigationProp>();
   const [isLoading, setIsLoading] = useState(true);
+  const [facultyId, setFacultyId] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [classes, setClasses] = useState<ClassAssignment[]>([]);
   const [totalCompletedSessions, setTotalCompletedSessions] = useState<number>(0);
   const [overallAvg, setOverallAvg] = useState<number>(0);
 
   // Extract faculty ID from email
-  const facultyId = "F001";
+  useEffect(() => {
+    const fetchFacultyId = async () => {
+      if (user?.email) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/faculty/by-email?email=${encodeURIComponent(user.email)}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch faculty data');
+          }
+          const data = await response.json();
+          setFacultyId(data.faculty_id || data.id);
+        } catch (error) {
+          console.error('Error fetching faculty ID:', error);
+          // Fallback to email-based ID if backend fails
+          const mailId = user.email.split('@')[0];
+          setFacultyId(mailId);
+        }
+      }
+    };
+    fetchFacultyId();
+  }, [user]);
 
   // Fetch dashboard data function
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
+      if (!facultyId) {
+        // Wait until facultyId is available
+        return;
+      }
       // Replace with your actual API endpoint
       const response = await fetch(`${API_BASE_URL}/faculty/dashboard/${facultyId}`, {
         method: 'GET',
@@ -123,6 +147,12 @@ const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
     }
   };
 
+  // Trigger fetch when facultyId becomes available
+  useEffect(() => {
+    if (facultyId) {
+      fetchDashboardData();
+    }
+  }, [facultyId]);
   // Pull to refresh function
   const onRefresh = () => {
     setIsRefreshing(true);

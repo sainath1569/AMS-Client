@@ -33,7 +33,7 @@ const App: React.FC = () => {
       try {
         // Check app version to detect updates/reinstalls
         const lastAppVersion = await AsyncStorage.getItem('app_version');
-        const currentAppVersion = '1.0.7'; // Must match versionName in build.gradle
+        const currentAppVersion = '1.0.8'; // Must match versionName in build.gradle
         
         if (lastAppVersion !== currentAppVersion) {
           // Clear FCM token data that might be corrupted after reinstall
@@ -77,15 +77,15 @@ const App: React.FC = () => {
         // Determine the home route based on user type
         let homeRoute = 'Home';
         
-        if (email === "r210435@rguktrkv.ac.in") {
+        if (email === "r210387@rguktrkv.ac.in") {
           // Admin Navigator - has "Home" tab
           homeRoute = 'Home';
-        } else if (email === "r210387@rguktrkv.ac.in") {
-          // Faculty Navigator - has "Schedule" tab as home
-          homeRoute = 'Schedule';
         } else if (/^r(20|21|22|23|24|25)\d+@rguktrkv\.ac\.in$/.test(email)) {
-          // Student Navigator - has "Home" tab
+          // Student Navigator - has "Schedule" tab as home
           homeRoute = 'Home';
+        } else if (email.endsWith("@rguktrkv.ac.in")) {
+          // Faculty Navigator - has "Home" tab
+          homeRoute = 'Schedule';
         }
         
         // Navigate to home screen
@@ -128,7 +128,7 @@ const App: React.FC = () => {
 
     const email = user.email;
 
-    if (email === "r210435@rguktrkv.ac.in") {
+    if (email === "r210387@rguktrkv.ac.in") {
       return (
         <AdminNavigator
           user={user}
@@ -138,16 +138,6 @@ const App: React.FC = () => {
       );
     }
 
-    if (email === "r210387@rguktrkv.ac.in") {
-      return (
-        <FacultyNavigator
-          user={user}
-          setIsLoggedIn={setIsLoggedIn}
-          setUser={setUser}
-        />
-      );
-    }
-    
     const isStudentEmail = /^r(20|21|22|23|24|25)\d+@rguktrkv\.ac\.in$/.test(email);
     
     if (isStudentEmail) {
@@ -159,8 +149,16 @@ const App: React.FC = () => {
         />
       );
     }
-    
-    
+
+    if (email.endsWith("@rguktrkv.ac.in")) {
+      return (
+        <FacultyNavigator
+          user={user}
+          setIsLoggedIn={setIsLoggedIn}
+          setUser={setUser}
+        />
+      );
+    }
 
     return (
       <LandingPage
